@@ -12,7 +12,7 @@ This program is a reporting tool that prints out reports (in plain text) based o
 Run the following command:
 
 ```
-$ python logs-analysis.py
+$ python logs_analysis.py
 ```
 
 ## License
