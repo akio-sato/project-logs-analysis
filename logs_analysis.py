@@ -27,7 +27,8 @@ ORDER BY views DESC
 
 QUESTION3 = "3. On which days did more than 1% of requests lead to errors?"
 
-QUERY3 = """SELECT TO_CHAR(date, 'FMMonth FMDD, YYYY'), ROUND(100.0*CAST(err/total AS NUMERIC), 1) AS ratio
+QUERY3 = """SELECT TO_CHAR(date, 'FMMonth FMDD, YYYY'),
+ROUND(100.0*CAST(err/total AS NUMERIC), 1) AS ratio
 FROM (SELECT time::date AS date,
 COUNT(*) AS total,
 SUM((status != '200 OK')::int)::float as err
