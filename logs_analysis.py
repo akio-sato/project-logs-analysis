@@ -7,66 +7,34 @@ DATABASE_NAME = "news"
 
 QUESTION1 = "1. What are the most popular three articles of all time?"
 
-QUERY1 = """SELECT articles.title, COUNT(*) AS number
-FROM articles, log
-WHERE REGEXP_REPLACE(log.path, '/article/', '') = articles.slug
-AND log.status = '200 OK'
-AND log.path != '/'
-GROUP BY articles.title
-ORDER BY number DESC
+QUERY1 = """SELECT title, COUNT(*) AS views
+FROM log JOIN articles
+ON log.path = CONCAT('/article/', articles.slug)
+GROUP BY title
+ORDER BY views DESC
 LIMIT 3
 """
 
-QUESTION2 = "2. Who are the most popular articles authors of all time?"
+QUESTION2 = "2. Who are the most popular article authors of all time?"
 
-QUERY2 = """SELECT authors.name, COUNT(*) AS number
-FROM articles, authors, log
-WHERE REGEXP_REPLACE(log.path, '/article/', '') = articles.slug
-AND articles.author = authors.id
-AND log.status = '200 OK'
-AND log.path != '/'
-GROUP BY authors.id
-ORDER BY number DESC
+QUERY2 = """SELECT name, COUNT(*) AS views
+FROM authors JOIN articles
+ON authors.id = articles.author JOIN log
+ON log.path = CONCAT('/article/', articles.slug)
+GROUP BY name
+ORDER BY views DESC
 """
 
 QUESTION3 = "3. On which days did more than 1% of requests lead to errors?"
 
-QUERY3 = """WITH error_table AS (
-SELECT DATE(log.time) AS date, COUNT(*) AS errors
+QUERY3 = """SELECT TO_CHAR(date, 'FMMonth FMDD, YYYY'), ROUND(100.0*CAST(err/total AS NUMERIC), 1) AS ratio
+FROM (SELECT time::date AS date,
+COUNT(*) AS total,
+SUM((status != '200 OK')::int)::float as err
 FROM log
-WHERE log.status != '200 OK'
-GROUP BY date
-ORDER BY date), nonerror_table AS (
-SELECT DATE(log.time) AS date, COUNT(*) AS nonerrors
-FROM log
-WHERE log.status = '200 OK'
-GROUP BY date
-ORDER BY date)
-SELECT error_table.date,
-ROUND(100.0*CAST(error_table.errors AS NUMERIC)/nonerror_table.nonerrors, 1)
-FROM error_table, nonerror_table
-WHERE error_table.date = nonerror_table.date
-AND 100.0*CAST(error_table.errors AS NUMERIC)/nonerror_table.nonerrors > 1.0
+GROUP BY date) AS errors
+WHERE err/total > 0.01;
 """
-
-# Date formatting within the SQL query (month name blank-padded to 9 chars)
-# QUERY3 = """WITH error_table AS (
-# SELECT DATE(log.time) AS date, COUNT(*) AS errors
-# FROM log
-# WHERE log.status != '200 OK'
-# GROUP BY date
-# ORDER BY date), nonerror_table AS (
-# SELECT DATE(log.time) AS date, COUNT(*) AS nonerrors
-# FROM log
-# WHERE log.status = '200 OK'
-# GROUP BY date
-# ORDER BY date)
-# SELECT TO_CHAR(error_table.date, 'Month DD, YYYY'),
-# ROUND(100.0*CAST(error_table.errors AS NUMERIC)/nonerror_table.nonerrors, 1)
-# FROM error_table, nonerror_table
-# WHERE error_table.date = nonerror_table.date
-# AND 100.0*CAST(error_table.errors AS NUMERIC)/nonerror_table.nonerrors > 1.0
-# """
 
 
 def get_answer(database_name, query):
@@ -79,18 +47,23 @@ def get_answer(database_name, query):
     Return value:
     results: a list of tuples, SQL results
     """
-    # Create a new database session, and cursors
-    conn = psycopg2.connect(dbname=database_name)
-    cur = conn.cursor()
-    # Execute SQL command
-    cur.execute(query)
-    # Fetch all rows of a query result
-    results = cur.fetchall()
-    # Close the cursor object and database session
-    cur.close()
-    conn.close()
-    # Return query results
-    return results
+    try:
+        # Create a new database session
+        conn = psycopg2.connect(dbname=database_name)
+    except psycopg2.DatabaseError as e:
+        print "ERROR: cannot connect to the database"
+    else:
+        # Create a new cursor
+        cur = conn.cursor()
+        # Execute SQL command
+        cur.execute(query)
+        # Fetch all rows of a query result
+        results = cur.fetchall()
+        # Close the cursor object and database session
+        cur.close()
+        conn.close()
+        # Return query results
+        return results
 
 
 def main():
@@ -99,30 +72,30 @@ def main():
     print "%s" % QUESTION1
     # Get SQL query results
     s = get_answer(DATABASE_NAME, QUERY1)
-    # Format and output answer
-    length = len(s)
-    for i in range(length):
-        print "\"%s\" - %s views" % (s[i][0], s[i][1])
+    if s is not None:
+        # Format and output answer
+        for (title, count) in s:
+            print "    {} - {} views".format(title, count)
     # Blank line
     print
     # Output second question
     print "%s" % QUESTION2
     # Get SQL query results
     s = get_answer(DATABASE_NAME, QUERY2)
-    # Format and output answer
-    length = len(s)
-    for i in range(length):
-        print "%s - %s views" % (s[i][0], s[i][1])
+    if s is not None:
+        # Format and output answer
+        for (author, count) in s:
+            print "    {} - {} views".format(author, count)
     # Blank line
     print
     # Output third question
     print "%s" % QUESTION3
     # Get SQL query results
     s = get_answer(DATABASE_NAME, QUERY3)
-    # Format and output answer
-    length = len(s)
-    for i in range(length):
-        print "%s - %s%% errors" % ('{:%B %d, %Y}'.format(s[i][0]), s[i][1])
+    if s is not None:
+        # Format and output answer
+        for (date, rate) in s:
+            print "    {} - {}% errors".format(date, rate)
 
 
 if __name__ == "__main__":
